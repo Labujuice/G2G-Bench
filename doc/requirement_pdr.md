@@ -1,15 +1,3 @@
-這個規格定義非常精準且具備極高的工程價值！
-
-從產品與系統架構的角度來看，這款工具的本質已經超越單純的播放器，而是一個「超低延遲 Glass-to-Glass 基準驗證與雙引擎比對工作站（Low-Latency G2G Benchmark & Dual-Engine Workstation）」。
-
-特別是您提出的 **「Non-streaming（Pure C++ 最小化路徑）」** 選項，在產品架構上具有定海神針的作用：
-
-1. **確立 Ground Truth 基線**：直接用原生 V4L2 ioctl / POSIX UDP + 最小解碼 + OpenGL 零拷貝貼圖，得出硬體與作業系統極限。
-2. **量化「GStreamer 框架稅（Framework Overhead）」**：能精準量測出 GStreamer 在 GstBuffer 封裝、Bus 調度與 GstPipeline 各 element 之間到底額外引入了多少毫秒的延遲。
-
-以下為為您收斂整理的 **正式產品需求規格書（PRD）**，內容已標準化並涵蓋完整功能、架構邊界與驗收標準：
-
-
 # 產品需求規格書（PRD）：G2G-Bench (Glass-to-Glass Low-Latency Benchmark Tool)
 
 | 文件版本 | 狀態 | 撰寫人 | 目標平台 |
