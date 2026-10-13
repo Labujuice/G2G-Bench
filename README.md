@@ -21,6 +21,7 @@
   * **Engine B (Pure C++ Native 最小直連引擎)**：
     * **UVC 模式**：直接透過 Linux System Call (`open`, `ioctl`, `mmap`) 請求 2 個緩衝區，一進一出無額外 Queue。
     * **UDP 模式**：原生 POSIX Non-blocking Socket 接收 RTP 封包，自行解析 RFC 6184 H.264 NAL / FU-A 單元，搭配 `libavcodec` low-delay 旗標（`AV_CODEC_FLAG_LOW_DELAY`, 單執行緒即時解碼）。
+    * **RTSP 模式**：採用原生 `libavformat` 零緩衝配置（`rtsp_transport=udp`, `nobuffer`, `low_delay`, `probesize=32k`, `analyzeduration=0`）自 UDP 拉取 RTP 串流，繞過 GStreamer 框架調度開銷。
     * **無框架負擔**：完全繞過 GStreamer Element 與 Message Bus 調度開銷，作為極致基準線。
 
 * 🚀 **Zero-Buffer 理念 (零緩衝隊列)**：

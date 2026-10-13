@@ -26,10 +26,17 @@ bool UIRenderer::init(GLFWwindow* window) {
 
     // Load clean TrueType font if available, otherwise use ImGui default
     const char* font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    const char* mono_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf";
+
     if (FILE* f = fopen(font_path, "rb")) {
         fclose(f);
         regular_font_ = io.Fonts->AddFontFromFileTTF(font_path, 16.0f);
-        large_font_ = io.Fonts->AddFontFromFileTTF(font_path, 52.0f);
+    }
+    if (FILE* f = fopen(mono_bold_path, "rb")) {
+        fclose(f);
+        large_font_ = io.Fonts->AddFontFromFileTTF(mono_bold_path, 80.0f);
+    } else if (regular_font_) {
+        large_font_ = io.Fonts->AddFontFromFileTTF(font_path, 80.0f);
     }
 
     if (!regular_font_) {
@@ -129,20 +136,27 @@ void UIRenderer::renderHeader(const EngineStats& stats, const EngineConfig& conf
 void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
     ImGui::BeginChild("StopwatchPanel", ImVec2(0, 0), true);
 
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ Reference Time ]");
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "[ Reference Stopwatch ]");
     ImGui::Separator();
 
     uint64_t current_us = is_frozen_ ? frozen_stopwatch_us_ : stopwatch.getElapsedMicroseconds();
     std::string time_str = Stopwatch::formatTimeMs(current_us);
 
-    ImGui::Dummy(ImVec2(0.0f, 20.0f));
-
-    // Centered huge text display
     float window_width = ImGui::GetWindowSize().x;
+    float avail_h = ImGui::GetContentRegionAvail().y;
+
+    // Center content vertically
+    float content_h = 240.0f;
+    float top_dummy = (avail_h - content_h) * 0.32f;
+    if (top_dummy > 10.0f) {
+        ImGui::Dummy(ImVec2(0.0f, top_dummy));
+    }
+
+    // Centered prominent huge time display
     if (large_font_) {
         ImGui::PushFont(large_font_);
     } else {
-        ImGui::SetWindowFontScale(3.2f);
+        ImGui::SetWindowFontScale(4.8f);
     }
     float text_width = ImGui::CalcTextSize(time_str.c_str()).x;
     ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
@@ -150,7 +164,7 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
     if (stopwatch.isRunning() && !is_frozen_) {
         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "%s", time_str.c_str());
     } else if (is_frozen_) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", time_str.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.15f, 1.0f), "%s", time_str.c_str());
     } else {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", time_str.c_str());
     }
@@ -161,36 +175,48 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
         ImGui::SetWindowFontScale(1.0f);
     }
 
-    std::string sub_us_str = "(1ms Precision / CLOCK_MONOTONIC_RAW: " + std::to_string(current_us) + " us)";
+    // Timestamp & Precision info
+    std::string sub_us_str = "CLOCK_MONOTONIC_RAW: " + std::to_string(current_us) + " us  (1ms Precision)";
     float sub_width = ImGui::CalcTextSize(sub_us_str.c_str()).x;
     ImGui::SetCursorPosX((window_width - sub_width) * 0.5f);
     ImGui::TextDisabled("%s", sub_us_str.c_str());
 
-    ImGui::Dummy(ImVec2(0.0f, 30.0f));
+    ImGui::Dummy(ImVec2(0.0f, 28.0f));
 
-    // Controls
-    float btn_w = 120.0f;
-    float total_btn_w = btn_w * 2 + 10.0f;
+    // Stopwatch Controls
+    float btn_w = 140.0f;
+    float btn_h = 42.0f;
+    float total_btn_w = btn_w * 2 + 16.0f;
     ImGui::SetCursorPosX((window_width - total_btn_w) * 0.5f);
 
     if (stopwatch.isRunning()) {
-        if (ImGui::Button("Pause", ImVec2(btn_w, 36.0f))) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.4f, 0.1f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.5f, 0.15f, 1.0f));
+        if (ImGui::Button("Pause", ImVec2(btn_w, btn_h))) {
             stopwatch.toggle();
         }
+        ImGui::PopStyleColor(2);
     } else {
-        if (ImGui::Button("Start", ImVec2(btn_w, 36.0f))) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.65f, 0.25f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.8f, 0.35f, 1.0f));
+        if (ImGui::Button("Start", ImVec2(btn_w, btn_h))) {
             stopwatch.toggle();
         }
+        ImGui::PopStyleColor(2);
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Reset", ImVec2(btn_w, 36.0f))) {
+
+    ImGui::SameLine(0.0f, 16.0f);
+    if (ImGui::Button("Reset", ImVec2(btn_w, btn_h))) {
         stopwatch.reset();
         if (is_frozen_) frozen_stopwatch_us_ = 0;
     }
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f));
     ImGui::Separator();
-    ImGui::TextDisabled("Shortcuts: [Space] Start/Pause  |  [R] Reset  |  [F] Freeze/Resume  |  [S] Save Snapshot");
+    const char* hint_text = "Shortcuts: [Space] Start / Pause  |  [R] Reset Stopwatch";
+    float hint_w = ImGui::CalcTextSize(hint_text).x;
+    ImGui::SetCursorPosX((window_width - hint_w) * 0.5f);
+    ImGui::TextDisabled("%s", hint_text);
 
     ImGui::EndChild();
 }
@@ -198,11 +224,15 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
 void UIRenderer::renderVideoPanel(Stopwatch& stopwatch) {
     ImGui::BeginChild("VideoPanel", ImVec2(0, 0), true);
 
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ Loopback Stream ]");
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "[ Video Stream Preview ]");
+    if (video_texture_.isValid()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%dx%d)", video_texture_.getWidth(), video_texture_.getHeight());
+    }
     ImGui::Separator();
 
     float avail_w = ImGui::GetContentRegionAvail().x;
-    float avail_h = ImGui::GetContentRegionAvail().y - 50.0f;
+    float avail_h = ImGui::GetContentRegionAvail().y - 55.0f;
 
     if (video_texture_.isValid()) {
         int tex_w = video_texture_.getWidth();
@@ -236,25 +266,30 @@ void UIRenderer::renderVideoPanel(Stopwatch& stopwatch) {
 
     ImGui::Separator();
 
-    // Action buttons
+    // Action Controls (Freeze & Snapshot)
+    float btn_h = 36.0f;
     if (is_frozen_) {
-        if (ImGui::Button("Resume Live", ImVec2(160.0f, 32.0f))) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.7f, 0.1f, 0.9f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
+        if (ImGui::Button("Resume Live [F]", ImVec2(160.0f, btn_h))) {
             toggleFreeze(stopwatch);
         }
+        ImGui::PopStyleColor(3);
     } else {
-        if (ImGui::Button("Freeze Compare", ImVec2(160.0f, 32.0f))) {
+        if (ImGui::Button("Freeze Compare [F]", ImVec2(160.0f, btn_h))) {
             toggleFreeze(stopwatch);
         }
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Save PNG Snapshot (S)", ImVec2(190.0f, 32.0f))) {
+    if (ImGui::Button("Save Snapshot (S)", ImVec2(160.0f, btn_h))) {
         snapshot_requested_ = true;
     }
 
     if (!last_saved_path_.empty()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Saved: %s", last_saved_path_.c_str());
+        ImGui::TextColored(ImVec4(0.3f, 0.95f, 0.4f, 1.0f), "[Saved: %s]", last_saved_path_.c_str());
     }
 
     ImGui::EndChild();
@@ -337,7 +372,6 @@ void UIRenderer::renderConfigPanel(
     ImGui::SameLine();
     if (ImGui::RadioButton("RTSP Stream", &src_type, 2)) {
         config.source_type = SourceType::RTSP;
-        config.engine_type = EngineType::GSTREAMER;
         engine_changed = true;
     }
 
@@ -427,7 +461,6 @@ void UIRenderer::renderConfigPanel(
         bool apply_clicked = ImGui::Button("Connect / Apply");
         if (enter_pressed || apply_clicked) {
             config.rtsp_url = rtsp_url_buf_;
-            config.engine_type = EngineType::GSTREAMER;
             engine_changed = true;
         }
         ImGui::SameLine();
@@ -445,18 +478,9 @@ void UIRenderer::renderConfigPanel(
         engine_changed = true;
     }
     ImGui::SameLine();
-    bool is_rtsp = (config.source_type == SourceType::RTSP);
-    if (is_rtsp) {
-        ImGui::BeginDisabled(true);
-    }
     if (ImGui::RadioButton("Pure C++ Native Direct IO (Engine B)", &eng_type, 1)) {
         config.engine_type = EngineType::NATIVE;
         engine_changed = true;
-    }
-    if (is_rtsp) {
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::TextDisabled("(GStreamer only for RTSP)");
     }
 
     ImGui::SameLine();

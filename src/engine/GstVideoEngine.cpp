@@ -53,7 +53,7 @@ std::string GstVideoEngine::buildPipelineString(const EngineConfig& config) {
            << "! video/x-raw,format=RGBA "
            << "! appsink name=sink sync=false drop=true max-buffers=1";
     } else if (config.source_type == SourceType::RTSP) {
-        ss << "rtspsrc location=" << config.rtsp_url << " latency=0 buffer-mode=none drop-on-latency=true "
+        ss << "rtspsrc location=" << config.rtsp_url << " protocols=udp latency=0 buffer-mode=none drop-on-latency=true "
            << "! rtph264depay "
            << "! h264parse "
            << "! avdec_h264 "

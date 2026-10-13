@@ -10,7 +10,9 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/error.h>
 #include <libswscale/swscale.h>
 }
 
@@ -30,10 +32,12 @@ public:
 private:
     void uvcWorkerLoop(std::string device, int width, int height, int fps, std::string format);
     void udpWorkerLoop(int port, std::string payload);
+    void rtspWorkerLoop(std::string rtsp_url);
 
     bool initDecoder(AVCodecID codec_id);
     void cleanupDecoder();
     void decodeAndPublish(const uint8_t* data, size_t size);
+    void publishDecodedFrame(AVFrame* frame);
 
     // Color conversion helpers
     static void convertYUYVtoRGBA(const uint8_t* yuyv, uint8_t* rgba, int width, int height);
