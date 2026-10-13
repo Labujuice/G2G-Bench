@@ -4,6 +4,7 @@
 [![Standard](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
 [![Dual Engine](https://img.shields.io/badge/Engine-GStreamer%20%7C%20Pure%20C%2B%2B-brightgreen.svg)]()
 [![Zero Buffer](https://img.shields.io/badge/Latency-Zero--Buffer-red.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **G2G-Bench** 是一套專為無人機 FPV 圖傳、遠端遙控、機器人視訊與車載環景系統設計的高精確度 **Glass-to-Glass (G2G，鏡頭採光到螢幕顯色)** 端到端延遲量測與驗證基準工具。
 
@@ -192,11 +193,13 @@ make -j$(nproc)
 ```
 g2g_analyzer/
 ├── CMakeLists.txt              # CMake 建置配置
+├── LICENSE                     # MIT 開源授權條款
 ├── README.md                   # 產品說明與使用手冊
 ├── doc/
 │   └── requirement_pdr.md      # 產品需求規格書 (PRD)
 ├── scripts/
-│   └── test_udp_streamer.sh    # 本地低延遲 UDP RTP 測試推流腳本
+│   ├── test_udp_streamer.sh    # 本地低延遲 UDP RTP 測試推流腳本
+│   └── test_rtsp_streamer.sh   # 本地相機低延遲 RTSP 測試推流腳本
 ├── third_party/
 │   └── stb_image_write.h       # PNG 快照存檔函式庫
 └── src/
@@ -221,4 +224,4 @@ g2g_analyzer/
 
 ## 9. 授權 (License)
 
-本工具為專業視訊延遲評估軟體，遵循內部工程開發與開源使用規範。
+本專案採用 [MIT 授權條款 (MIT License)](LICENSE) 開源發布，歡迎自由商業使用、修改、整合與二次開發。
