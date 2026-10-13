@@ -42,10 +42,12 @@ public:
     void toggleFreeze(const Stopwatch& stopwatch);
     bool isFrozen() const { return is_frozen_; }
 
+    void requestSnapshot() { snapshot_requested_ = true; }
+
 private:
     void renderHeader(const EngineStats& stats, const EngineConfig& config);
     void renderStopwatchPanel(Stopwatch& stopwatch);
-    void renderVideoPanel();
+    void renderVideoPanel(Stopwatch& stopwatch);
     void renderConfigPanel(
         EngineConfig& config,
         const EngineStats& stats,
@@ -62,6 +64,7 @@ private:
 
     bool is_frozen_{false};
     uint64_t frozen_stopwatch_us_{0};
+    bool snapshot_requested_{false};
     std::string last_saved_path_;
 
     FpsTracker render_fps_tracker_;

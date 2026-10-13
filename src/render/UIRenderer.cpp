@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <iostream>
+#include <cstring>
 
 namespace g2g {
 
@@ -100,6 +101,8 @@ void UIRenderer::handleKeyPress(int key, int action, Stopwatch& stopwatch) {
         }
     } else if (key == GLFW_KEY_F) {
         toggleFreeze(stopwatch);
+    } else if (key == GLFW_KEY_S) {
+        snapshot_requested_ = true;
     }
 }
 
@@ -185,12 +188,12 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f));
     ImGui::Separator();
-    ImGui::TextDisabled("Shortcuts: [Space] Start/Pause  |  [R] Reset  |  [F] Freeze/Resume");
+    ImGui::TextDisabled("Shortcuts: [Space] Start/Pause  |  [R] Reset  |  [F] Freeze/Resume  |  [S] Save Snapshot");
 
     ImGui::EndChild();
 }
 
-void UIRenderer::renderVideoPanel() {
+void UIRenderer::renderVideoPanel(Stopwatch& stopwatch) {
     ImGui::BeginChild("VideoPanel", ImVec2(0, 0), true);
 
     ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ Loopback Stream ]");
@@ -234,20 +237,17 @@ void UIRenderer::renderVideoPanel() {
     // Action buttons
     if (is_frozen_) {
         if (ImGui::Button("Resume Live", ImVec2(160.0f, 32.0f))) {
-            is_frozen_ = false;
+            toggleFreeze(stopwatch);
         }
     } else {
         if (ImGui::Button("Freeze Compare", ImVec2(160.0f, 32.0f))) {
-            is_frozen_ = true;
-            frozen_frame_ = latest_frame_;
+            toggleFreeze(stopwatch);
         }
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Save PNG Snapshot", ImVec2(180.0f, 32.0f))) {
-        const VideoFrame& target = is_frozen_ ? frozen_frame_ : latest_frame_;
-        std::string ref_str = Stopwatch::formatTimeMs(frozen_stopwatch_us_);
-        last_saved_path_ = ImageDumper::saveComparisonPng(ref_str, target);
+    if (ImGui::Button("Save PNG Snapshot (S)", ImVec2(190.0f, 32.0f))) {
+        snapshot_requested_ = true;
     }
 
     if (!last_saved_path_.empty()) {
@@ -426,7 +426,7 @@ void UIRenderer::render(
     ImGui::SameLine();
 
     ImGui::BeginChild("CenterSplitRight", ImVec2(half_w, center_h), false);
-    renderVideoPanel();
+    renderVideoPanel(stopwatch);
     ImGui::EndChild();
 
     // Bottom Panel
@@ -436,6 +436,34 @@ void UIRenderer::render(
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    // Capture complete side-by-side canvas on snapshot request
+    if (snapshot_requested_) {
+        snapshot_requested_ = false;
+        int fb_w = 0, fb_h = 0;
+        glfwGetFramebufferSize(window, &fb_w, &fb_h);
+        if (fb_w > 0 && fb_h > 0) {
+            std::vector<uint8_t> pixels(fb_w * fb_h * 4);
+            glPixelStorei(GL_PACK_ALIGNMENT, 4);
+            glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+            // Flip vertically because OpenGL coordinates start at bottom-left
+            std::vector<uint8_t> flipped(fb_w * fb_h * 4);
+            for (int y = 0; y < fb_h; ++y) {
+                std::memcpy(
+                    flipped.data() + y * fb_w * 4,
+                    pixels.data() + (fb_h - 1 - y) * fb_w * 4,
+                    fb_w * 4
+                );
+            }
+
+            VideoFrame snap_frame;
+            snap_frame.width = fb_w;
+            snap_frame.height = fb_h;
+            snap_frame.data = std::move(flipped);
+            last_saved_path_ = ImageDumper::saveFramePng(snap_frame);
+        }
+    }
 }
 
 } // namespace g2g

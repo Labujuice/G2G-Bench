@@ -33,7 +33,7 @@ std::string ImageDumper::saveFramePng(const VideoFrame& frame, const std::string
 
     std::string path = output_filepath;
     if (path.empty()) {
-        path = generateTimestampFilename("frame");
+        path = generateTimestampFilename("g2g_snapshot");
     }
 
     int stride = frame.width * 4;
