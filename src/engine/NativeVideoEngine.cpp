@@ -504,7 +504,8 @@ void NativeVideoEngine::rtspWorkerLoop(std::string rtsp_url) {
     fmt_ctx->interrupt_callback.opaque = &stop_thread_;
 
     AVDictionary* opts = nullptr;
-    av_dict_set(&opts, "rtsp_transport", "tcp", 0);
+    av_dict_set(&opts, "rtsp_transport", "udp", 0);
+    av_dict_set(&opts, "buffer_size", "1048576", 0);
     av_dict_set(&opts, "fflags", "nobuffer", 0);
     av_dict_set(&opts, "flags", "low_delay", 0);
     av_dict_set(&opts, "max_delay", "0", 0);
@@ -512,10 +513,10 @@ void NativeVideoEngine::rtspWorkerLoop(std::string rtsp_url) {
     av_dict_set(&opts, "analyzeduration", "0", 0);
     av_dict_set(&opts, "stimeout", "5000000", 0); // 5 sec socket timeout in us
 
-    std::cout << "[NativeVideoEngine] Connecting to RTSP: " << rtsp_url << " (low-delay TCP)..." << std::endl;
+    std::cout << "[NativeVideoEngine] Connecting to RTSP: " << rtsp_url << " (low-delay UDP RTP)..." << std::endl;
     {
         std::lock_guard<std::mutex> lock(stats_mutex_);
-        status_msg_ = "Connecting to RTSP (Native)...";
+        status_msg_ = "Connecting to RTSP (Native UDP)...";
     }
 
     int ret = avformat_open_input(&fmt_ctx, rtsp_url.c_str(), nullptr, &opts);
@@ -574,7 +575,7 @@ void NativeVideoEngine::rtspWorkerLoop(std::string rtsp_url) {
 
     {
         std::lock_guard<std::mutex> lock(stats_mutex_);
-        status_msg_ = "Running (Native RTSP TCP + avcodec)";
+        status_msg_ = "Running (Native RTSP UDP + avcodec)";
     }
     signal_lost_.store(false, std::memory_order_release);
 
@@ -621,7 +622,7 @@ bool NativeVideoEngine::start(const EngineConfig& config) {
         status_msg_ = "Running (Native UDP Socket + avcodec)";
         worker_thread_ = std::thread(&NativeVideoEngine::udpWorkerLoop, this, config.udp_port, config.udp_payload);
     } else if (config.source_type == SourceType::RTSP) {
-        status_msg_ = "Connecting (Native RTSP TCP + avcodec)...";
+        status_msg_ = "Connecting (Native RTSP UDP + avcodec)...";
         worker_thread_ = std::thread(&NativeVideoEngine::rtspWorkerLoop, this, config.rtsp_url);
     }
 
