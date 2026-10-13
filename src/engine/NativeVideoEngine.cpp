@@ -116,51 +116,55 @@ void NativeVideoEngine::decodeAndPublish(const uint8_t* data, size_t size) {
         }
 
         while (avcodec_receive_frame(av_ctx_, av_frame_) == 0) {
-            int w = av_frame_->width;
-            int h = av_frame_->height;
-            auto fmt = static_cast<AVPixelFormat>(av_frame_->format);
-
-            if (w <= 0 || h <= 0) continue;
-
-            if (!sws_ctx_ || sws_last_w_ != w || sws_last_h_ != h || sws_last_fmt_ != fmt) {
-                if (sws_ctx_) sws_freeContext(sws_ctx_);
-                sws_ctx_ = sws_getContext(
-                    w, h, fmt,
-                    w, h, AV_PIX_FMT_RGBA,
-                    SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
-                );
-                sws_last_w_ = w;
-                sws_last_h_ = h;
-                sws_last_fmt_ = fmt;
-            }
-
-            if (!sws_ctx_) continue;
-
-            VideoFrame& write_buf = frame_queue_.getWriteBuffer();
-            write_buf.width = w;
-            write_buf.height = h;
-            write_buf.timestamp_us = Stopwatch::getMonotonicRawUs();
-            write_buf.frame_index = ++frame_counter_;
-
-            size_t expected_size = static_cast<size_t>(w * h * 4);
-            if (write_buf.data.size() != expected_size) {
-                write_buf.data.resize(expected_size);
-            }
-
-            uint8_t* dst_data[4] = { write_buf.data.data(), nullptr, nullptr, nullptr };
-            int dst_linesize[4] = { w * 4, 0, 0, 0 };
-
-            sws_scale(sws_ctx_, av_frame_->data, av_frame_->linesize, 0, h, dst_data, dst_linesize);
-
-            frame_queue_.publishFrame();
-
-            {
-                std::lock_guard<std::mutex> lock(stats_mutex_);
-                capture_fps_tracker_.tick(write_buf.timestamp_us);
-            }
-            signal_lost_.store(false, std::memory_order_release);
+            publishDecodedFrame(av_frame_);
         }
     }
+}
+
+void NativeVideoEngine::publishDecodedFrame(AVFrame* frame) {
+    int w = frame->width;
+    int h = frame->height;
+    auto fmt = static_cast<AVPixelFormat>(frame->format);
+
+    if (w <= 0 || h <= 0) return;
+
+    if (!sws_ctx_ || sws_last_w_ != w || sws_last_h_ != h || sws_last_fmt_ != fmt) {
+        if (sws_ctx_) sws_freeContext(sws_ctx_);
+        sws_ctx_ = sws_getContext(
+            w, h, fmt,
+            w, h, AV_PIX_FMT_RGBA,
+            SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
+        );
+        sws_last_w_ = w;
+        sws_last_h_ = h;
+        sws_last_fmt_ = fmt;
+    }
+
+    if (!sws_ctx_) return;
+
+    VideoFrame& write_buf = frame_queue_.getWriteBuffer();
+    write_buf.width = w;
+    write_buf.height = h;
+    write_buf.timestamp_us = Stopwatch::getMonotonicRawUs();
+    write_buf.frame_index = ++frame_counter_;
+
+    size_t expected_size = static_cast<size_t>(w * h * 4);
+    if (write_buf.data.size() != expected_size) {
+        write_buf.data.resize(expected_size);
+    }
+
+    uint8_t* dst_data[4] = { write_buf.data.data(), nullptr, nullptr, nullptr };
+    int dst_linesize[4] = { w * 4, 0, 0, 0 };
+
+    sws_scale(sws_ctx_, frame->data, frame->linesize, 0, h, dst_data, dst_linesize);
+
+    frame_queue_.publishFrame();
+
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        capture_fps_tracker_.tick(write_buf.timestamp_us);
+    }
+    signal_lost_.store(false, std::memory_order_release);
 }
 
 void NativeVideoEngine::convertYUYVtoRGBA(const uint8_t* yuyv, uint8_t* rgba, int width, int height) {
@@ -480,6 +484,130 @@ void NativeVideoEngine::udpWorkerLoop(int port, std::string payload) {
     cleanupDecoder();
 }
 
+void NativeVideoEngine::rtspWorkerLoop(std::string rtsp_url) {
+    cleanupDecoder();
+
+    AVFormatContext* fmt_ctx = avformat_alloc_context();
+    if (!fmt_ctx) {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        status_msg_ = "Native RTSP: failed to alloc context";
+        signal_lost_.store(true, std::memory_order_release);
+        is_running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    // Set interrupt callback so network operations abort quickly on stop
+    fmt_ctx->interrupt_callback.callback = [](void* ctx) -> int {
+        auto* stop_flag = static_cast<std::atomic<bool>*>(ctx);
+        return (stop_flag && stop_flag->load(std::memory_order_relaxed)) ? 1 : 0;
+    };
+    fmt_ctx->interrupt_callback.opaque = &stop_thread_;
+
+    AVDictionary* opts = nullptr;
+    av_dict_set(&opts, "rtsp_transport", "tcp", 0);
+    av_dict_set(&opts, "fflags", "nobuffer", 0);
+    av_dict_set(&opts, "flags", "low_delay", 0);
+    av_dict_set(&opts, "max_delay", "0", 0);
+    av_dict_set(&opts, "probesize", "32768", 0);
+    av_dict_set(&opts, "analyzeduration", "0", 0);
+    av_dict_set(&opts, "stimeout", "5000000", 0); // 5 sec socket timeout in us
+
+    std::cout << "[NativeVideoEngine] Connecting to RTSP: " << rtsp_url << " (low-delay TCP)..." << std::endl;
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        status_msg_ = "Connecting to RTSP (Native)...";
+    }
+
+    int ret = avformat_open_input(&fmt_ctx, rtsp_url.c_str(), nullptr, &opts);
+    av_dict_free(&opts);
+
+    if (ret < 0) {
+        char errbuf[128]{0};
+        av_strerror(ret, errbuf, sizeof(errbuf));
+        std::cerr << "[NativeVideoEngine] Failed to open RTSP stream: " << errbuf << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(stats_mutex_);
+            status_msg_ = "RTSP Connection Failed: " + std::string(errbuf);
+        }
+        signal_lost_.store(true, std::memory_order_release);
+        is_running_.store(false, std::memory_order_release);
+        avformat_free_context(fmt_ctx);
+        return;
+    }
+
+    if (avformat_find_stream_info(fmt_ctx, nullptr) < 0) {
+        std::cerr << "[NativeVideoEngine] Failed to retrieve RTSP stream info" << std::endl;
+        avformat_close_input(&fmt_ctx);
+        signal_lost_.store(true, std::memory_order_release);
+        is_running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    int video_stream_idx = -1;
+    for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
+        if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            video_stream_idx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if (video_stream_idx < 0) {
+        std::cerr << "[NativeVideoEngine] No video stream found in RTSP source" << std::endl;
+        avformat_close_input(&fmt_ctx);
+        signal_lost_.store(true, std::memory_order_release);
+        is_running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    AVCodecParameters* codecpar = fmt_ctx->streams[video_stream_idx]->codecpar;
+    if (!initDecoder(codecpar->codec_id)) {
+        std::cerr << "[NativeVideoEngine] Failed to init decoder for RTSP stream" << std::endl;
+        avformat_close_input(&fmt_ctx);
+        signal_lost_.store(true, std::memory_order_release);
+        is_running_.store(false, std::memory_order_release);
+        return;
+    }
+
+    if (codecpar->extradata_size > 0 && av_ctx_) {
+        avcodec_parameters_to_context(av_ctx_, codecpar);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        status_msg_ = "Running (Native RTSP TCP + avcodec)";
+    }
+    signal_lost_.store(false, std::memory_order_release);
+
+    AVPacket* pkt = av_packet_alloc();
+
+    while (!stop_thread_.load(std::memory_order_relaxed)) {
+        ret = av_read_frame(fmt_ctx, pkt);
+        if (ret < 0) {
+            if (stop_thread_.load(std::memory_order_relaxed)) break;
+            if (ret == AVERROR_EOF || ret == AVERROR(EIO) || ret == AVERROR(ECONNRESET)) {
+                std::cerr << "[NativeVideoEngine] RTSP stream disconnected / EOF" << std::endl;
+                signal_lost_.store(true, std::memory_order_release);
+                is_running_.store(false, std::memory_order_release);
+                break;
+            }
+            continue;
+        }
+
+        if (pkt->stream_index == video_stream_idx) {
+            if (avcodec_send_packet(av_ctx_, pkt) == 0) {
+                while (avcodec_receive_frame(av_ctx_, av_frame_) == 0) {
+                    publishDecodedFrame(av_frame_);
+                }
+            }
+        }
+        av_packet_unref(pkt);
+    }
+
+    av_packet_free(&pkt);
+    avformat_close_input(&fmt_ctx);
+    cleanupDecoder();
+}
+
 bool NativeVideoEngine::start(const EngineConfig& config) {
     stop();
 
@@ -489,9 +617,12 @@ bool NativeVideoEngine::start(const EngineConfig& config) {
     if (config.source_type == SourceType::V4L2) {
         status_msg_ = "Running (Native V4L2 mmap)";
         worker_thread_ = std::thread(&NativeVideoEngine::uvcWorkerLoop, this, config.v4l2_device, config.v4l2_width, config.v4l2_height, config.v4l2_fps, config.v4l2_format);
-    } else {
+    } else if (config.source_type == SourceType::UDP_RTP) {
         status_msg_ = "Running (Native UDP Socket + avcodec)";
         worker_thread_ = std::thread(&NativeVideoEngine::udpWorkerLoop, this, config.udp_port, config.udp_payload);
+    } else if (config.source_type == SourceType::RTSP) {
+        status_msg_ = "Connecting (Native RTSP TCP + avcodec)...";
+        worker_thread_ = std::thread(&NativeVideoEngine::rtspWorkerLoop, this, config.rtsp_url);
     }
 
     is_running_.store(true, std::memory_order_release);

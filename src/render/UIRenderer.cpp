@@ -337,7 +337,6 @@ void UIRenderer::renderConfigPanel(
     ImGui::SameLine();
     if (ImGui::RadioButton("RTSP Stream", &src_type, 2)) {
         config.source_type = SourceType::RTSP;
-        config.engine_type = EngineType::GSTREAMER;
         engine_changed = true;
     }
 
@@ -427,7 +426,6 @@ void UIRenderer::renderConfigPanel(
         bool apply_clicked = ImGui::Button("Connect / Apply");
         if (enter_pressed || apply_clicked) {
             config.rtsp_url = rtsp_url_buf_;
-            config.engine_type = EngineType::GSTREAMER;
             engine_changed = true;
         }
         ImGui::SameLine();
@@ -445,18 +443,9 @@ void UIRenderer::renderConfigPanel(
         engine_changed = true;
     }
     ImGui::SameLine();
-    bool is_rtsp = (config.source_type == SourceType::RTSP);
-    if (is_rtsp) {
-        ImGui::BeginDisabled(true);
-    }
     if (ImGui::RadioButton("Pure C++ Native Direct IO (Engine B)", &eng_type, 1)) {
         config.engine_type = EngineType::NATIVE;
         engine_changed = true;
-    }
-    if (is_rtsp) {
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::TextDisabled("(GStreamer only for RTSP)");
     }
 
     ImGui::SameLine();
