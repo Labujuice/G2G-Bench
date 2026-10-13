@@ -4,13 +4,22 @@
 #include "engine/NativeVideoEngine.hpp"
 #include "render/UIRenderer.hpp"
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
 #include <iostream>
 #include <memory>
 
 static g2g::UIRenderer* g_ui_renderer = nullptr;
 static g2g::Stopwatch* g_stopwatch = nullptr;
 
-static void keyCallback(GLFWwindow* /*window*/, int key, int /*scancode*/, int action, int /*mods*/) {
+static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureKeyboard) {
+        return;
+    }
+
     if (g_ui_renderer && g_stopwatch) {
         g_ui_renderer->handleKeyPress(key, action, *g_stopwatch);
     }

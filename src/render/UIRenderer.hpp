@@ -75,6 +75,8 @@ private:
     int selected_device_idx_{0};
     int selected_profile_idx_{0};
     bool v4l2_initialized_{false};
+    char rtsp_url_buf_[512]{"rtsp://127.0.0.1:8554/live"};
+    bool rtsp_buf_initialized_{false};
 
     FpsTracker render_fps_tracker_;
     ImFont* regular_font_{nullptr};

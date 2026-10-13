@@ -337,6 +337,7 @@ void UIRenderer::renderConfigPanel(
     ImGui::SameLine();
     if (ImGui::RadioButton("RTSP Stream", &src_type, 2)) {
         config.source_type = SourceType::RTSP;
+        config.engine_type = EngineType::GSTREAMER;
         engine_changed = true;
     }
 
@@ -400,16 +401,37 @@ void UIRenderer::renderConfigPanel(
         }
     } else if (config.source_type == SourceType::UDP_RTP) {
         ImGui::SetNextItemWidth(120.0f);
-        ImGui::InputInt("Port", &config.udp_port);
+        if (ImGui::InputInt("Port", &config.udp_port, 1, 100, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            engine_changed = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Apply##udp")) {
+            engine_changed = true;
+        }
         ImGui::SameLine();
         ImGui::Text("Payload: H.264 (RFC 6184)");
     } else if (config.source_type == SourceType::RTSP) {
-        char rtsp_buf[256];
-        std::snprintf(rtsp_buf, sizeof(rtsp_buf), "%s", config.rtsp_url.c_str());
-        ImGui::SetNextItemWidth(350.0f);
-        if (ImGui::InputText("RTSP URL", rtsp_buf, sizeof(rtsp_buf))) {
-            config.rtsp_url = rtsp_buf;
+        if (!rtsp_buf_initialized_) {
+            std::strncpy(rtsp_url_buf_, config.rtsp_url.c_str(), sizeof(rtsp_url_buf_) - 1);
+            rtsp_buf_initialized_ = true;
         }
+
+        ImGui::SetNextItemWidth(380.0f);
+        if (ImGui::InputText("RTSP URL", rtsp_url_buf_, sizeof(rtsp_url_buf_))) {
+            config.rtsp_url = rtsp_url_buf_;
+        }
+
+        bool enter_pressed = ImGui::IsItemFocused() && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
+
+        ImGui::SameLine();
+        bool apply_clicked = ImGui::Button("Connect / Apply");
+        if (enter_pressed || apply_clicked) {
+            config.rtsp_url = rtsp_url_buf_;
+            config.engine_type = EngineType::GSTREAMER;
+            engine_changed = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(Press Enter or Apply to update)");
     }
 
     ImGui::Separator();
@@ -423,9 +445,18 @@ void UIRenderer::renderConfigPanel(
         engine_changed = true;
     }
     ImGui::SameLine();
+    bool is_rtsp = (config.source_type == SourceType::RTSP);
+    if (is_rtsp) {
+        ImGui::BeginDisabled(true);
+    }
     if (ImGui::RadioButton("Pure C++ Native Direct IO (Engine B)", &eng_type, 1)) {
         config.engine_type = EngineType::NATIVE;
         engine_changed = true;
+    }
+    if (is_rtsp) {
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::TextDisabled("(GStreamer only for RTSP)");
     }
 
     ImGui::SameLine();

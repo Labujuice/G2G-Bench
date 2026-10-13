@@ -164,6 +164,14 @@ make -j$(nproc)
 3. 切換為 **Pure C++ Native Direct IO** 模式，畫面將在 1 秒內無縫切換至原生 Socket + libavcodec 低延遲解碼。
 4. 按下快捷鍵 `F` 進行凍結，檢驗左側碼錶與右側視訊是否同時精確定格。
 
+### RTSP 串流測試方法
+專案亦提供了本地 RTSP 回環測試腳本（以 FFmpeg 在背景建立低延遲 RTSP 服務端）：
+1. 開啟另一個終端機執行：
+   ```bash
+   ./scripts/test_rtsp_streamer.sh 8554 30 1280 720
+   ```
+2. 在 G2G-Bench 底部面板切換至 **[RTSP Stream]**，輸入框填寫 `rtsp://127.0.0.1:8554/live`，按下 **[Enter]** 鍵或點擊 **[Connect / Apply]**，即可直接連線並顯示即時畫面。
+
 ---
 
 ## 7. 驗收標準對照 (Acceptance Criteria)

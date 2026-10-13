@@ -55,6 +55,7 @@ std::string GstVideoEngine::buildPipelineString(const EngineConfig& config) {
     } else if (config.source_type == SourceType::RTSP) {
         ss << "rtspsrc location=" << config.rtsp_url << " latency=0 buffer-mode=none drop-on-latency=true "
            << "! rtph264depay "
+           << "! h264parse "
            << "! avdec_h264 "
            << "! videoconvert "
            << "! video/x-raw,format=RGBA "
@@ -142,6 +143,7 @@ void GstVideoEngine::busWatchThreadFunc() {
                 if (err) g_error_free(err);
                 if (dbg) g_free(dbg);
                 signal_lost_.store(true, std::memory_order_release);
+                is_running_.store(false, std::memory_order_release);
                 break;
             }
             case GST_MESSAGE_WARNING: {
