@@ -121,7 +121,7 @@ make -j$(nproc)
 
 ### UI 介面與控制說明 (UI Controls)
 1. **Stopwatch Panel (左側基準碼錶)**：
-   * 點擊 **[Start]** 開始計時，**[Pause]** 暫停，**[Reset]** 重置。
+   * 點擊 **[Start] / [Pause]** 按鈕切換計時/暫停狀態，**[Reset]** 重置。
    * **快捷鍵 (Shortcuts)**：
      * `Space` (空白鍵)：切換 Start / Pause
      * `R` 鍵：碼錶 Reset

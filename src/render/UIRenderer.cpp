@@ -169,16 +169,18 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
     ImGui::Dummy(ImVec2(0.0f, 30.0f));
 
     // Controls
-    float btn_w = 110.0f;
-    float total_btn_w = btn_w * 3 + 20.0f;
+    float btn_w = 120.0f;
+    float total_btn_w = btn_w * 2 + 10.0f;
     ImGui::SetCursorPosX((window_width - total_btn_w) * 0.5f);
 
-    if (ImGui::Button("Start", ImVec2(btn_w, 36.0f))) {
-        stopwatch.start();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Pause", ImVec2(btn_w, 36.0f))) {
-        stopwatch.pause();
+    if (stopwatch.isRunning()) {
+        if (ImGui::Button("Pause", ImVec2(btn_w, 36.0f))) {
+            stopwatch.toggle();
+        }
+    } else {
+        if (ImGui::Button("Start", ImVec2(btn_w, 36.0f))) {
+            stopwatch.toggle();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Reset", ImVec2(btn_w, 36.0f))) {
