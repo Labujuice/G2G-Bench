@@ -258,6 +258,67 @@ void UIRenderer::renderVideoPanel(Stopwatch& stopwatch) {
     ImGui::EndChild();
 }
 
+void UIRenderer::refreshV4L2Devices(EngineConfig& config) {
+    v4l2_devices_ = V4L2Enumerator::enumerateDevices();
+    selected_device_idx_ = 0;
+    for (size_t i = 0; i < v4l2_devices_.size(); ++i) {
+        if (v4l2_devices_[i].path == config.v4l2_device) {
+            selected_device_idx_ = static_cast<int>(i);
+            break;
+        }
+    }
+    syncV4L2Selection(config);
+    v4l2_initialized_ = true;
+}
+
+void UIRenderer::syncV4L2Selection(EngineConfig& config) {
+    if (v4l2_devices_.empty()) return;
+    if (selected_device_idx_ < 0 || selected_device_idx_ >= static_cast<int>(v4l2_devices_.size())) {
+        selected_device_idx_ = 0;
+    }
+
+    const auto& dev = v4l2_devices_[selected_device_idx_];
+    config.v4l2_device = dev.path;
+
+    // Check format
+    selected_format_idx_ = 0;
+    for (size_t i = 0; i < dev.supported_formats.size(); ++i) {
+        if (dev.supported_formats[i] == config.v4l2_format) {
+            selected_format_idx_ = static_cast<int>(i);
+            break;
+        }
+    }
+    if (!dev.supported_formats.empty()) {
+        config.v4l2_format = dev.supported_formats[selected_format_idx_];
+    }
+
+    // Check resolution
+    selected_resolution_idx_ = 0;
+    for (size_t i = 0; i < dev.supported_resolutions.size(); ++i) {
+        if (dev.supported_resolutions[i].first == config.v4l2_width &&
+            dev.supported_resolutions[i].second == config.v4l2_height) {
+            selected_resolution_idx_ = static_cast<int>(i);
+            break;
+        }
+    }
+    if (!dev.supported_resolutions.empty()) {
+        config.v4l2_width = dev.supported_resolutions[selected_resolution_idx_].first;
+        config.v4l2_height = dev.supported_resolutions[selected_resolution_idx_].second;
+    }
+
+    // Check fps
+    selected_fps_idx_ = 0;
+    for (size_t i = 0; i < dev.supported_framerates.size(); ++i) {
+        if (dev.supported_framerates[i] == config.v4l2_fps) {
+            selected_fps_idx_ = static_cast<int>(i);
+            break;
+        }
+    }
+    if (!dev.supported_framerates.empty()) {
+        config.v4l2_fps = dev.supported_framerates[selected_fps_idx_];
+    }
+}
+
 void UIRenderer::renderConfigPanel(
     EngineConfig& config,
     const EngineStats& stats,
@@ -266,6 +327,10 @@ void UIRenderer::renderConfigPanel(
     bool& stream_stop_requested,
     bool& vsync_enabled
 ) {
+    if (!v4l2_initialized_) {
+        refreshV4L2Devices(config);
+    }
+
     ImGui::BeginChild("ConfigPanel", ImVec2(0, 0), true);
 
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Configuration & Diagnostics");
@@ -292,21 +357,90 @@ void UIRenderer::renderConfigPanel(
 
     // Source details
     if (config.source_type == SourceType::V4L2) {
-        char dev_buf[128];
-        std::snprintf(dev_buf, sizeof(dev_buf), "%s", config.v4l2_device.c_str());
-        ImGui::SetNextItemWidth(180.0f);
-        if (ImGui::InputText("Device", dev_buf, sizeof(dev_buf))) {
-            config.v4l2_device = dev_buf;
+        if (v4l2_devices_.empty()) {
+            refreshV4L2Devices(config);
         }
+
+        const auto& cur_dev = v4l2_devices_[selected_device_idx_];
+
+        // 1. Device Combo
+        std::string cur_dev_label = cur_dev.path + " (" + cur_dev.card_name + ")";
+        ImGui::SetNextItemWidth(260.0f);
+        if (ImGui::BeginCombo("Device", cur_dev_label.c_str())) {
+            for (size_t i = 0; i < v4l2_devices_.size(); ++i) {
+                bool is_sel = (selected_device_idx_ == static_cast<int>(i));
+                std::string item_label = v4l2_devices_[i].path + " (" + v4l2_devices_[i].card_name + ")";
+                if (ImGui::Selectable(item_label.c_str(), is_sel)) {
+                    selected_device_idx_ = static_cast<int>(i);
+                    syncV4L2Selection(config);
+                    engine_changed = true;
+                }
+                if (is_sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
         ImGui::SameLine();
+        if (ImGui::Button("Rescan")) {
+            refreshV4L2Devices(config);
+            engine_changed = true;
+        }
+
+        // 2. Format Combo
+        ImGui::SameLine();
+        std::string cur_fmt = (selected_format_idx_ < static_cast<int>(cur_dev.supported_formats.size()))
+                            ? cur_dev.supported_formats[selected_format_idx_] : config.v4l2_format;
+        ImGui::SetNextItemWidth(110.0f);
+        if (ImGui::BeginCombo("Format", cur_fmt.c_str())) {
+            for (size_t i = 0; i < cur_dev.supported_formats.size(); ++i) {
+                bool is_sel = (selected_format_idx_ == static_cast<int>(i));
+                if (ImGui::Selectable(cur_dev.supported_formats[i].c_str(), is_sel)) {
+                    selected_format_idx_ = static_cast<int>(i);
+                    config.v4l2_format = cur_dev.supported_formats[i];
+                    engine_changed = true;
+                }
+                if (is_sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        // 3. Resolution Combo
+        ImGui::SameLine();
+        std::string cur_res = std::to_string(config.v4l2_width) + "x" + std::to_string(config.v4l2_height);
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::BeginCombo("Resolution", cur_res.c_str())) {
+            for (size_t i = 0; i < cur_dev.supported_resolutions.size(); ++i) {
+                bool is_sel = (selected_resolution_idx_ == static_cast<int>(i));
+                std::string res_label = std::to_string(cur_dev.supported_resolutions[i].first) + "x" +
+                                        std::to_string(cur_dev.supported_resolutions[i].second);
+                if (ImGui::Selectable(res_label.c_str(), is_sel)) {
+                    selected_resolution_idx_ = static_cast<int>(i);
+                    config.v4l2_width = cur_dev.supported_resolutions[i].first;
+                    config.v4l2_height = cur_dev.supported_resolutions[i].second;
+                    engine_changed = true;
+                }
+                if (is_sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        // 4. Framerate (FPS) Combo
+        ImGui::SameLine();
+        std::string cur_fps = std::to_string(config.v4l2_fps) + " fps";
         ImGui::SetNextItemWidth(100.0f);
-        ImGui::InputInt("Width", &config.v4l2_width);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(100.0f);
-        ImGui::InputInt("Height", &config.v4l2_height);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(80.0f);
-        ImGui::InputInt("FPS", &config.v4l2_fps);
+        if (ImGui::BeginCombo("FPS", cur_fps.c_str())) {
+            for (size_t i = 0; i < cur_dev.supported_framerates.size(); ++i) {
+                bool is_sel = (selected_fps_idx_ == static_cast<int>(i));
+                std::string fps_label = std::to_string(cur_dev.supported_framerates[i]) + " fps";
+                if (ImGui::Selectable(fps_label.c_str(), is_sel)) {
+                    selected_fps_idx_ = static_cast<int>(i);
+                    config.v4l2_fps = cur_dev.supported_framerates[i];
+                    engine_changed = true;
+                }
+                if (is_sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
     } else if (config.source_type == SourceType::UDP_RTP) {
         ImGui::SetNextItemWidth(120.0f);
         ImGui::InputInt("Port", &config.udp_port);

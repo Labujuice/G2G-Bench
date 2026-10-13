@@ -28,7 +28,7 @@ public:
     EngineStats getStats() const override;
 
 private:
-    void uvcWorkerLoop(std::string device, int width, int height, int fps);
+    void uvcWorkerLoop(std::string device, int width, int height, int fps, std::string format);
     void udpWorkerLoop(int port, std::string payload);
 
     bool initDecoder(AVCodecID codec_id);

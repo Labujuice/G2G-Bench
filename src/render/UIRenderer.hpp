@@ -5,6 +5,7 @@
 #include "core/Types.hpp"
 #include "engine/IVideoEngine.hpp"
 #include "utils/FpsTracker.hpp"
+#include "utils/V4L2Enumerator.hpp"
 #include <string>
 #include <memory>
 
@@ -66,6 +67,16 @@ private:
     uint64_t frozen_stopwatch_us_{0};
     bool snapshot_requested_{false};
     std::string last_saved_path_;
+
+    void refreshV4L2Devices(EngineConfig& config);
+    void syncV4L2Selection(EngineConfig& config);
+
+    std::vector<V4L2DeviceInfo> v4l2_devices_;
+    int selected_device_idx_{0};
+    int selected_format_idx_{0};
+    int selected_resolution_idx_{0};
+    int selected_fps_idx_{0};
+    bool v4l2_initialized_{false};
 
     FpsTracker render_fps_tracker_;
     ImFont* regular_font_{nullptr};

@@ -24,9 +24,10 @@ struct EngineConfig {
     
     // V4L2 settings
     std::string v4l2_device = "/dev/video0";
-    int v4l2_width = 1920;
-    int v4l2_height = 1080;
-    int v4l2_fps = 60;
+    std::string v4l2_format = "YUYV";
+    int v4l2_width = 1280;
+    int v4l2_height = 720;
+    int v4l2_fps = 30;
     
     // UDP settings
     int udp_port = 5004;

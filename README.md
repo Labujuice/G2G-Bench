@@ -132,6 +132,11 @@ make -j$(nproc)
    * 點擊 **[Save PNG Snapshot]**：將定格畫面匯出至 `captures/` 目錄中。
 3. **Configuration & Diagnostics Panel (底部配置面板)**：
    * **Input Source**：切換 `V4L2 / UVC Camera`、`UDP-RTP Stream`、`RTSP Stream`。
+   * **V4L2 / UVC 規格下拉選單**：
+     * **Device**：自動列舉系統已連接的攝影機裝置（如 `/dev/video0 (HD User Facing)`），附帶 `[Rescan]` 按鈕隨插即掃。
+     * **Format**：下拉選單選取相機支援的影像格式（`YUYV`、`MJPEG`、`NV12` 等）。
+     * **Resolution**：下拉選單選取相機支援的解析度（`1920x1080`、`1280x720`、`640x480` 等）。
+     * **FPS**：下拉選單選取幀率（`60 fps`、`30 fps`、`10 fps` 等）。
    * **Stream Engine**：
      * `(*) GStreamer Pipeline (Engine A)`
      * `( ) Pure C++ Native Direct IO (Engine B)`

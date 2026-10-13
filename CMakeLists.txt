@@ -78,6 +78,7 @@ add_executable(g2g_bench
     src/main.cpp
     src/core/Stopwatch.cpp
     src/utils/ImageDumper.cpp
+    src/utils/V4L2Enumerator.cpp
     src/engine/GstVideoEngine.cpp
     src/engine/NativeVideoEngine.cpp
     src/render/GLTexture.cpp

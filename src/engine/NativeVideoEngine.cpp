@@ -197,8 +197,7 @@ void NativeVideoEngine::convertYUYVtoRGBA(const uint8_t* yuyv, uint8_t* rgba, in
     }
 }
 
-void NativeVideoEngine::uvcWorkerLoop(std::string device, int width, int height, int fps) {
-    (void)fps;
+void NativeVideoEngine::uvcWorkerLoop(std::string device, int width, int height, int fps, std::string format) {
     int fd = open(device.c_str(), O_RDWR | O_NONBLOCK, 0);
     if (fd < 0) {
         std::cerr << "[NativeVideoEngine] Failed to open V4L2 device: " << device << std::endl;
@@ -221,20 +220,39 @@ void NativeVideoEngine::uvcWorkerLoop(std::string device, int width, int height,
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     fmt.fmt.pix.width = width;
     fmt.fmt.pix.height = height;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    if (format == "MJPEG" || format == "MJPG") {
+        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+    } else {
+        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    }
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-    bool is_mjpeg = false;
+    bool is_mjpeg = (fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_MJPEG);
     if (ioctl(fd, VIDIOC_S_FMT, &fmt) < 0) {
-        // Try MJPEG fallback
-        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+        // Try fallback format if requested format failed
+        if (is_mjpeg) {
+            fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+            is_mjpeg = false;
+        } else {
+            fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+            is_mjpeg = true;
+        }
         if (ioctl(fd, VIDIOC_S_FMT, &fmt) < 0) {
             std::cerr << "[NativeVideoEngine] Failed to set V4L2 format" << std::endl;
             close(fd);
             signal_lost_.store(true, std::memory_order_release);
             return;
         }
-        is_mjpeg = true;
+    }
+
+    // Attempt to set frame rate
+    if (fps > 0) {
+        struct v4l2_streamparm parm;
+        std::memset(&parm, 0, sizeof(parm));
+        parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        parm.parm.capture.timeperframe.numerator = 1;
+        parm.parm.capture.timeperframe.denominator = static_cast<uint32_t>(fps);
+        ioctl(fd, VIDIOC_S_PARM, &parm);
     }
 
     int actual_w = fmt.fmt.pix.width;
@@ -470,7 +488,7 @@ bool NativeVideoEngine::start(const EngineConfig& config) {
 
     if (config.source_type == SourceType::V4L2) {
         status_msg_ = "Running (Native V4L2 mmap)";
-        worker_thread_ = std::thread(&NativeVideoEngine::uvcWorkerLoop, this, config.v4l2_device, config.v4l2_width, config.v4l2_height, config.v4l2_fps);
+        worker_thread_ = std::thread(&NativeVideoEngine::uvcWorkerLoop, this, config.v4l2_device, config.v4l2_width, config.v4l2_height, config.v4l2_fps, config.v4l2_format);
     } else {
         status_msg_ = "Running (Native UDP Socket + avcodec)";
         worker_thread_ = std::thread(&NativeVideoEngine::udpWorkerLoop, this, config.udp_port, config.udp_payload);

@@ -27,8 +27,21 @@ GstVideoEngine::~GstVideoEngine() {
 std::string GstVideoEngine::buildPipelineString(const EngineConfig& config) {
     std::ostringstream ss;
     if (config.source_type == SourceType::V4L2) {
-        ss << "v4l2src device=" << config.v4l2_device << " io-mode=mmap "
-           << "! videoconvert "
+        ss << "v4l2src device=" << config.v4l2_device << " io-mode=mmap ";
+        if (config.v4l2_format == "MJPEG" || config.v4l2_format == "MJPG") {
+            ss << "! image/jpeg,width=" << config.v4l2_width << ",height=" << config.v4l2_height
+               << ",framerate=" << config.v4l2_fps << "/1 ! jpegdec ";
+        } else if (config.v4l2_format == "YUYV" || config.v4l2_format == "YUY2") {
+            ss << "! video/x-raw,format=YUY2,width=" << config.v4l2_width << ",height=" << config.v4l2_height
+               << ",framerate=" << config.v4l2_fps << "/1 ";
+        } else if (config.v4l2_format == "NV12") {
+            ss << "! video/x-raw,format=NV12,width=" << config.v4l2_width << ",height=" << config.v4l2_height
+               << ",framerate=" << config.v4l2_fps << "/1 ";
+        } else {
+            ss << "! video/x-raw,width=" << config.v4l2_width << ",height=" << config.v4l2_height
+               << ",framerate=" << config.v4l2_fps << "/1 ";
+        }
+        ss << "! videoconvert "
            << "! video/x-raw,format=RGBA "
            << "! appsink name=sink sync=false drop=true max-buffers=1";
     } else if (config.source_type == SourceType::UDP_RTP) {
