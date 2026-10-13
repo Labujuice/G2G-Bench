@@ -134,9 +134,7 @@ make -j$(nproc)
    * **Input Source**：切換 `V4L2 / UVC Camera`、`UDP-RTP Stream`、`RTSP Stream`。
    * **V4L2 / UVC 規格下拉選單**：
      * **Device**：自動列舉系統已連接的攝影機裝置（如 `/dev/video0 (HD User Facing)`），附帶 `[Rescan]` 按鈕隨插即掃。
-     * **Format**：下拉選單選取相機支援的影像格式（`YUYV`、`MJPEG`、`NV12` 等）。
-     * **Resolution**：下拉選單選取相機支援的解析度（`1920x1080`、`1280x720`、`640x480` 等）。
-     * **FPS**：下拉選單選取幀率（`60 fps`、`30 fps`、`10 fps` 等）。
+     * **Profile (Format/Res/FPS)**：**單一整合選單**，直接列出硬體真實支援的有效規格組合（例如 `MJPG - 1280x720 @ 30 fps`、`YUYV - 1280x720 @ 10 fps`、`YUYV - 640x480 @ 30 fps` 等），杜絕選取到無效或無法協商之參數組合。
    * **Stream Engine**：
      * `(*) GStreamer Pipeline (Engine A)`
      * `( ) Pure C++ Native Direct IO (Engine B)`

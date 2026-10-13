@@ -12,7 +12,7 @@ namespace g2g {
 
 static std::string fourccToString(uint32_t fourcc) {
     if (fourcc == V4L2_PIX_FMT_YUYV) return "YUYV";
-    if (fourcc == V4L2_PIX_FMT_MJPEG) return "MJPEG";
+    if (fourcc == V4L2_PIX_FMT_MJPEG) return "MJPG";
     if (fourcc == V4L2_PIX_FMT_NV12) return "NV12";
     if (fourcc == V4L2_PIX_FMT_H264) return "H264";
 
@@ -49,21 +49,16 @@ bool V4L2Enumerator::queryDevice(const std::string& dev_path, V4L2DeviceInfo& in
 
     info.path = dev_path;
     info.card_name = reinterpret_cast<const char*>(cap.card);
-    info.supported_formats.clear();
-    info.supported_resolutions.clear();
-    info.supported_framerates.clear();
-
-    std::set<std::string> format_set;
-    std::set<std::pair<int, int>> resolution_set;
-    std::set<int> fps_set;
+    info.profiles.clear();
 
     struct v4l2_fmtdesc fmtdesc;
     std::memset(&fmtdesc, 0, sizeof(fmtdesc));
     fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
+    std::set<std::string> seen_profiles;
+
     while (ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc) == 0) {
         std::string fmt_name = fourccToString(fmtdesc.pixelformat);
-        format_set.insert(fmt_name);
 
         struct v4l2_frmsizeenum frmsize;
         std::memset(&frmsize, 0, sizeof(frmsize));
@@ -73,7 +68,6 @@ bool V4L2Enumerator::queryDevice(const std::string& dev_path, V4L2DeviceInfo& in
             if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
                 int w = static_cast<int>(frmsize.discrete.width);
                 int h = static_cast<int>(frmsize.discrete.height);
-                resolution_set.insert({w, h});
 
                 struct v4l2_frmivalenum frmival;
                 std::memset(&frmival, 0, sizeof(frmival));
@@ -81,16 +75,43 @@ bool V4L2Enumerator::queryDevice(const std::string& dev_path, V4L2DeviceInfo& in
                 frmival.width = frmsize.discrete.width;
                 frmival.height = frmsize.discrete.height;
 
+                bool had_fps = false;
                 while (ioctl(fd, VIDIOC_ENUM_FRAMEINTERVALS, &frmival) == 0) {
                     if (frmival.type == V4L2_FRMIVAL_TYPE_DISCRETE) {
                         if (frmival.discrete.numerator > 0) {
                             int fps = static_cast<int>(frmival.discrete.denominator / frmival.discrete.numerator);
                             if (fps > 0) {
-                                fps_set.insert(fps);
+                                std::string key = fmt_name + "_" + std::to_string(w) + "_" + std::to_string(h) + "_" + std::to_string(fps);
+                                if (seen_profiles.find(key) == seen_profiles.end()) {
+                                    seen_profiles.insert(key);
+
+                                    V4L2Profile prof;
+                                    prof.format = fmt_name;
+                                    prof.width = w;
+                                    prof.height = h;
+                                    prof.fps = fps;
+                                    prof.label = fmt_name + " - " + std::to_string(w) + "x" + std::to_string(h) + " @ " + std::to_string(fps) + " fps";
+                                    info.profiles.push_back(prof);
+                                    had_fps = true;
+                                }
                             }
                         }
                     }
                     frmival.index++;
+                }
+
+                if (!had_fps) {
+                    std::string key = fmt_name + "_" + std::to_string(w) + "_" + std::to_string(h) + "_30";
+                    if (seen_profiles.find(key) == seen_profiles.end()) {
+                        seen_profiles.insert(key);
+                        V4L2Profile prof;
+                        prof.format = fmt_name;
+                        prof.width = w;
+                        prof.height = h;
+                        prof.fps = 30;
+                        prof.label = fmt_name + " - " + std::to_string(w) + "x" + std::to_string(h) + " @ 30 fps";
+                        info.profiles.push_back(prof);
+                    }
                 }
             }
             frmsize.index++;
@@ -100,29 +121,21 @@ bool V4L2Enumerator::queryDevice(const std::string& dev_path, V4L2DeviceInfo& in
 
     close(fd);
 
-    for (const auto& fmt : format_set) {
-        info.supported_formats.push_back(fmt);
-    }
-
-    // Sort resolutions descending (e.g. 1920x1080 first)
-    info.supported_resolutions.assign(resolution_set.begin(), resolution_set.end());
-    std::sort(info.supported_resolutions.begin(), info.supported_resolutions.end(), [](const auto& a, const auto& b) {
-        return (a.first * a.second) > (b.first * b.second);
+    // Sort profiles: highest pixel throughput first (Resolution * FPS), then by format
+    std::sort(info.profiles.begin(), info.profiles.end(), [](const V4L2Profile& a, const V4L2Profile& b) {
+        uint64_t rate_a = static_cast<uint64_t>(a.width) * a.height * a.fps;
+        uint64_t rate_b = static_cast<uint64_t>(b.width) * b.height * b.fps;
+        if (rate_a != rate_b) return rate_a > rate_b;
+        if ((a.width * a.height) != (b.width * b.height)) return (a.width * a.height) > (b.width * b.height);
+        return a.format < b.format;
     });
 
-    // Sort framerates descending (e.g. 60, 30, ...)
-    info.supported_framerates.assign(fps_set.begin(), fps_set.end());
-    std::sort(info.supported_framerates.begin(), info.supported_framerates.end(), std::greater<int>());
-
-    // Defaults if empty
-    if (info.supported_formats.empty()) {
-        info.supported_formats = {"YUYV", "MJPEG"};
-    }
-    if (info.supported_resolutions.empty()) {
-        info.supported_resolutions = {{1920, 1080}, {1280, 720}, {640, 480}};
-    }
-    if (info.supported_framerates.empty()) {
-        info.supported_framerates = {60, 30, 15};
+    // Provide default fallback profile if none found
+    if (info.profiles.empty()) {
+        info.profiles.push_back({"MJPG", 1280, 720, 30, "MJPG - 1280x720 @ 30 fps"});
+        info.profiles.push_back({"YUYV", 1280, 720, 10, "YUYV - 1280x720 @ 10 fps"});
+        info.profiles.push_back({"YUYV", 640, 480, 30, "YUYV - 640x480 @ 30 fps"});
+        info.profiles.push_back({"MJPG", 640, 480, 30, "MJPG - 640x480 @ 30 fps"});
     }
 
     return true;
@@ -143,9 +156,9 @@ std::vector<V4L2DeviceInfo> V4L2Enumerator::enumerateDevices() {
         V4L2DeviceInfo fallback;
         fallback.path = "/dev/video0";
         fallback.card_name = "Default Camera (/dev/video0)";
-        fallback.supported_formats = {"YUYV", "MJPEG"};
-        fallback.supported_resolutions = {{1920, 1080}, {1280, 720}, {640, 480}};
-        fallback.supported_framerates = {60, 30, 15};
+        fallback.profiles.push_back({"MJPG", 1280, 720, 30, "MJPG - 1280x720 @ 30 fps"});
+        fallback.profiles.push_back({"YUYV", 1280, 720, 10, "YUYV - 1280x720 @ 10 fps"});
+        fallback.profiles.push_back({"YUYV", 640, 480, 30, "YUYV - 640x480 @ 30 fps"});
         devices.push_back(fallback);
     }
 

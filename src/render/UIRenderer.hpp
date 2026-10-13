@@ -73,9 +73,7 @@ private:
 
     std::vector<V4L2DeviceInfo> v4l2_devices_;
     int selected_device_idx_{0};
-    int selected_format_idx_{0};
-    int selected_resolution_idx_{0};
-    int selected_fps_idx_{0};
+    int selected_profile_idx_{0};
     bool v4l2_initialized_{false};
 
     FpsTracker render_fps_tracker_;

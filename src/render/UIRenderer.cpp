@@ -280,43 +280,26 @@ void UIRenderer::syncV4L2Selection(EngineConfig& config) {
     const auto& dev = v4l2_devices_[selected_device_idx_];
     config.v4l2_device = dev.path;
 
-    // Check format
-    selected_format_idx_ = 0;
-    for (size_t i = 0; i < dev.supported_formats.size(); ++i) {
-        if (dev.supported_formats[i] == config.v4l2_format) {
-            selected_format_idx_ = static_cast<int>(i);
+    if (dev.profiles.empty()) return;
+
+    // Find best match for current config in profiles
+    selected_profile_idx_ = 0;
+    for (size_t i = 0; i < dev.profiles.size(); ++i) {
+        const auto& prof = dev.profiles[i];
+        if (prof.format == config.v4l2_format &&
+            prof.width == config.v4l2_width &&
+            prof.height == config.v4l2_height &&
+            prof.fps == config.v4l2_fps) {
+            selected_profile_idx_ = static_cast<int>(i);
             break;
         }
-    }
-    if (!dev.supported_formats.empty()) {
-        config.v4l2_format = dev.supported_formats[selected_format_idx_];
     }
 
-    // Check resolution
-    selected_resolution_idx_ = 0;
-    for (size_t i = 0; i < dev.supported_resolutions.size(); ++i) {
-        if (dev.supported_resolutions[i].first == config.v4l2_width &&
-            dev.supported_resolutions[i].second == config.v4l2_height) {
-            selected_resolution_idx_ = static_cast<int>(i);
-            break;
-        }
-    }
-    if (!dev.supported_resolutions.empty()) {
-        config.v4l2_width = dev.supported_resolutions[selected_resolution_idx_].first;
-        config.v4l2_height = dev.supported_resolutions[selected_resolution_idx_].second;
-    }
-
-    // Check fps
-    selected_fps_idx_ = 0;
-    for (size_t i = 0; i < dev.supported_framerates.size(); ++i) {
-        if (dev.supported_framerates[i] == config.v4l2_fps) {
-            selected_fps_idx_ = static_cast<int>(i);
-            break;
-        }
-    }
-    if (!dev.supported_framerates.empty()) {
-        config.v4l2_fps = dev.supported_framerates[selected_fps_idx_];
-    }
+    const auto& chosen = dev.profiles[selected_profile_idx_];
+    config.v4l2_format = chosen.format;
+    config.v4l2_width = chosen.width;
+    config.v4l2_height = chosen.height;
+    config.v4l2_fps = chosen.fps;
 }
 
 void UIRenderer::renderConfigPanel(
@@ -386,55 +369,27 @@ void UIRenderer::renderConfigPanel(
             engine_changed = true;
         }
 
-        // 2. Format Combo
+        // 2. Single Unified Profile Combo (Format + Resolution + FPS grouped together)
         ImGui::SameLine();
-        std::string cur_fmt = (selected_format_idx_ < static_cast<int>(cur_dev.supported_formats.size()))
-                            ? cur_dev.supported_formats[selected_format_idx_] : config.v4l2_format;
-        ImGui::SetNextItemWidth(110.0f);
-        if (ImGui::BeginCombo("Format", cur_fmt.c_str())) {
-            for (size_t i = 0; i < cur_dev.supported_formats.size(); ++i) {
-                bool is_sel = (selected_format_idx_ == static_cast<int>(i));
-                if (ImGui::Selectable(cur_dev.supported_formats[i].c_str(), is_sel)) {
-                    selected_format_idx_ = static_cast<int>(i);
-                    config.v4l2_format = cur_dev.supported_formats[i];
-                    engine_changed = true;
-                }
-                if (is_sel) ImGui::SetItemDefaultFocus();
+        std::string cur_profile_label = "No profiles available";
+        if (!cur_dev.profiles.empty()) {
+            if (selected_profile_idx_ < 0 || selected_profile_idx_ >= static_cast<int>(cur_dev.profiles.size())) {
+                selected_profile_idx_ = 0;
             }
-            ImGui::EndCombo();
+            cur_profile_label = cur_dev.profiles[selected_profile_idx_].label;
         }
 
-        // 3. Resolution Combo
-        ImGui::SameLine();
-        std::string cur_res = std::to_string(config.v4l2_width) + "x" + std::to_string(config.v4l2_height);
-        ImGui::SetNextItemWidth(140.0f);
-        if (ImGui::BeginCombo("Resolution", cur_res.c_str())) {
-            for (size_t i = 0; i < cur_dev.supported_resolutions.size(); ++i) {
-                bool is_sel = (selected_resolution_idx_ == static_cast<int>(i));
-                std::string res_label = std::to_string(cur_dev.supported_resolutions[i].first) + "x" +
-                                        std::to_string(cur_dev.supported_resolutions[i].second);
-                if (ImGui::Selectable(res_label.c_str(), is_sel)) {
-                    selected_resolution_idx_ = static_cast<int>(i);
-                    config.v4l2_width = cur_dev.supported_resolutions[i].first;
-                    config.v4l2_height = cur_dev.supported_resolutions[i].second;
-                    engine_changed = true;
-                }
-                if (is_sel) ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        // 4. Framerate (FPS) Combo
-        ImGui::SameLine();
-        std::string cur_fps = std::to_string(config.v4l2_fps) + " fps";
-        ImGui::SetNextItemWidth(100.0f);
-        if (ImGui::BeginCombo("FPS", cur_fps.c_str())) {
-            for (size_t i = 0; i < cur_dev.supported_framerates.size(); ++i) {
-                bool is_sel = (selected_fps_idx_ == static_cast<int>(i));
-                std::string fps_label = std::to_string(cur_dev.supported_framerates[i]) + " fps";
-                if (ImGui::Selectable(fps_label.c_str(), is_sel)) {
-                    selected_fps_idx_ = static_cast<int>(i);
-                    config.v4l2_fps = cur_dev.supported_framerates[i];
+        ImGui::SetNextItemWidth(340.0f);
+        if (ImGui::BeginCombo("Profile (Format/Res/FPS)", cur_profile_label.c_str())) {
+            for (size_t i = 0; i < cur_dev.profiles.size(); ++i) {
+                bool is_sel = (selected_profile_idx_ == static_cast<int>(i));
+                if (ImGui::Selectable(cur_dev.profiles[i].label.c_str(), is_sel)) {
+                    selected_profile_idx_ = static_cast<int>(i);
+                    const auto& chosen = cur_dev.profiles[selected_profile_idx_];
+                    config.v4l2_format = chosen.format;
+                    config.v4l2_width = chosen.width;
+                    config.v4l2_height = chosen.height;
+                    config.v4l2_fps = chosen.fps;
                     engine_changed = true;
                 }
                 if (is_sel) ImGui::SetItemDefaultFocus();
