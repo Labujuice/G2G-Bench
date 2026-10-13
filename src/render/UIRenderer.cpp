@@ -23,7 +23,19 @@ bool UIRenderer::init(GLFWwindow* window) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Apply clean modern dark styling
+    // Load clean TrueType font if available, otherwise use ImGui default
+    const char* font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    if (FILE* f = fopen(font_path, "rb")) {
+        fclose(f);
+        regular_font_ = io.Fonts->AddFontFromFileTTF(font_path, 16.0f);
+        large_font_ = io.Fonts->AddFontFromFileTTF(font_path, 52.0f);
+    }
+
+    if (!regular_font_) {
+        regular_font_ = io.Fonts->AddFontDefault();
+    }
+
+    // Modern clean dark theme
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 6.0f;
@@ -97,7 +109,7 @@ void UIRenderer::renderHeader(const EngineStats& stats, const EngineConfig& conf
 
     ImVec4 status_color = stats.is_running ? (stats.is_signal_lost ? ImVec4(1.0f, 0.4f, 0.0f, 1.0f) : ImVec4(0.2f, 0.9f, 0.2f, 1.0f)) : ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
 
-    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "G2G-Bench v1.0 (Glass-to-Glass Benchmark)");
+    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "G2G-Bench v1.0 [Glass-to-Glass Benchmark]");
     ImGui::SameLine();
     ImGui::Text("| Engine: [%s] |", engine_str.c_str());
     ImGui::SameLine();
@@ -114,7 +126,7 @@ void UIRenderer::renderHeader(const EngineStats& stats, const EngineConfig& conf
 void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
     ImGui::BeginChild("StopwatchPanel", ImVec2(0, 0), true);
 
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ 基準時間 (Reference Time) ]");
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ Reference Time ]");
     ImGui::Separator();
 
     uint64_t current_us = is_frozen_ ? frozen_stopwatch_us_ : stopwatch.getElapsedMicroseconds();
@@ -124,7 +136,11 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
 
     // Centered huge text display
     float window_width = ImGui::GetWindowSize().x;
-    ImGui::SetWindowFontScale(3.2f);
+    if (large_font_) {
+        ImGui::PushFont(large_font_);
+    } else {
+        ImGui::SetWindowFontScale(3.2f);
+    }
     float text_width = ImGui::CalcTextSize(time_str.c_str()).x;
     ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
 
@@ -136,9 +152,13 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", time_str.c_str());
     }
 
-    ImGui::SetWindowFontScale(1.0f);
+    if (large_font_) {
+        ImGui::PopFont();
+    } else {
+        ImGui::SetWindowFontScale(1.0f);
+    }
 
-    std::string sub_us_str = "(1ms 刷新率精度 / CLOCK_MONOTONIC_RAW: " + std::to_string(current_us) + " us)";
+    std::string sub_us_str = "(1ms Precision / CLOCK_MONOTONIC_RAW: " + std::to_string(current_us) + " us)";
     float sub_width = ImGui::CalcTextSize(sub_us_str.c_str()).x;
     ImGui::SetCursorPosX((window_width - sub_width) * 0.5f);
     ImGui::TextDisabled("%s", sub_us_str.c_str());
@@ -150,22 +170,22 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
     float total_btn_w = btn_w * 3 + 20.0f;
     ImGui::SetCursorPosX((window_width - total_btn_w) * 0.5f);
 
-    if (ImGui::Button("啟動 (Start)", ImVec2(btn_w, 36.0f))) {
+    if (ImGui::Button("Start", ImVec2(btn_w, 36.0f))) {
         stopwatch.start();
     }
     ImGui::SameLine();
-    if (ImGui::Button("暫停 (Pause)", ImVec2(btn_w, 36.0f))) {
+    if (ImGui::Button("Pause", ImVec2(btn_w, 36.0f))) {
         stopwatch.pause();
     }
     ImGui::SameLine();
-    if (ImGui::Button("歸零 (Reset)", ImVec2(btn_w, 36.0f))) {
+    if (ImGui::Button("Reset", ImVec2(btn_w, 36.0f))) {
         stopwatch.reset();
         if (is_frozen_) frozen_stopwatch_us_ = 0;
     }
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f));
     ImGui::Separator();
-    ImGui::TextDisabled("快捷鍵說明: [Space] 暫停/繼續  |  [R] 碼錶歸零  |  [F] 凍結/恢復");
+    ImGui::TextDisabled("Shortcuts: [Space] Start/Pause  |  [R] Reset  |  [F] Freeze/Resume");
 
     ImGui::EndChild();
 }
@@ -173,11 +193,11 @@ void UIRenderer::renderStopwatchPanel(Stopwatch& stopwatch) {
 void UIRenderer::renderVideoPanel() {
     ImGui::BeginChild("VideoPanel", ImVec2(0, 0), true);
 
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ 回傳影像 (Loopback Stream) ]");
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "[ Loopback Stream ]");
     ImGui::Separator();
 
     float avail_w = ImGui::GetContentRegionAvail().x;
-    float avail_h = ImGui::GetContentRegionAvail().y - 50.0f; // leave room for action bar
+    float avail_h = ImGui::GetContentRegionAvail().y - 50.0f;
 
     if (video_texture_.isValid()) {
         int tex_w = video_texture_.getWidth();
@@ -202,7 +222,7 @@ void UIRenderer::renderVideoPanel() {
     } else {
         // Placeholder
         ImGui::Dummy(ImVec2(0.0f, avail_h * 0.35f));
-        const char* msg = "等待視訊輸入 (Waiting for Video Stream)...";
+        const char* msg = "Waiting for Video Stream...";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX((avail_w - tw) * 0.5f);
         ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "%s", msg);
@@ -213,18 +233,18 @@ void UIRenderer::renderVideoPanel() {
 
     // Action buttons
     if (is_frozen_) {
-        if (ImGui::Button("恢復實時畫面 (Resume)", ImVec2(160.0f, 32.0f))) {
+        if (ImGui::Button("Resume Live", ImVec2(160.0f, 32.0f))) {
             is_frozen_ = false;
         }
     } else {
-        if (ImGui::Button("凍結比對 (Freeze)", ImVec2(160.0f, 32.0f))) {
+        if (ImGui::Button("Freeze Compare", ImVec2(160.0f, 32.0f))) {
             is_frozen_ = true;
             frozen_frame_ = latest_frame_;
         }
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("單鍵快照存檔 (Dump PNG)", ImVec2(180.0f, 32.0f))) {
+    if (ImGui::Button("Save PNG Snapshot", ImVec2(180.0f, 32.0f))) {
         const VideoFrame& target = is_frozen_ ? frozen_frame_ : latest_frame_;
         std::string ref_str = Stopwatch::formatTimeMs(frozen_stopwatch_us_);
         last_saved_path_ = ImageDumper::saveComparisonPng(ref_str, target);
@@ -232,7 +252,7 @@ void UIRenderer::renderVideoPanel() {
 
     if (!last_saved_path_.empty()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "已存檔: %s", last_saved_path_.c_str());
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Saved: %s", last_saved_path_.c_str());
     }
 
     ImGui::EndChild();
@@ -248,24 +268,24 @@ void UIRenderer::renderConfigPanel(
 ) {
     ImGui::BeginChild("ConfigPanel", ImVec2(0, 0), true);
 
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "參數配置與監控面板 (Configuration & Diagnostics)");
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Configuration & Diagnostics");
     ImGui::Separator();
 
     // Source selection
-    ImGui::Text("輸入源:");
+    ImGui::Text("Input Source:");
     ImGui::SameLine();
     int src_type = static_cast<int>(config.source_type);
-    if (ImGui::RadioButton("V4L2 / UVC 相機", &src_type, 0)) {
+    if (ImGui::RadioButton("V4L2 / UVC Camera", &src_type, 0)) {
         config.source_type = SourceType::V4L2;
         engine_changed = true;
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("UDP-RTP 串流", &src_type, 1)) {
+    if (ImGui::RadioButton("UDP-RTP Stream", &src_type, 1)) {
         config.source_type = SourceType::UDP_RTP;
         engine_changed = true;
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("RTSP 串流", &src_type, 2)) {
+    if (ImGui::RadioButton("RTSP Stream", &src_type, 2)) {
         config.source_type = SourceType::RTSP;
         engine_changed = true;
     }
@@ -304,7 +324,7 @@ void UIRenderer::renderConfigPanel(
     ImGui::Separator();
 
     // Engine Selection
-    ImGui::Text("串流引擎:");
+    ImGui::Text("Stream Engine:");
     ImGui::SameLine();
     int eng_type = static_cast<int>(config.engine_type);
     if (ImGui::RadioButton("GStreamer Pipeline (Engine A)", &eng_type, 0)) {
@@ -322,18 +342,18 @@ void UIRenderer::renderConfigPanel(
     ImGui::SameLine();
 
     if (!stats.is_running) {
-        if (ImGui::Button("啟動收流 (Start)", ImVec2(120.0f, 26.0f))) {
+        if (ImGui::Button("Start Stream", ImVec2(120.0f, 26.0f))) {
             stream_start_requested = true;
         }
     } else {
-        if (ImGui::Button("停止收流 (Stop)", ImVec2(120.0f, 26.0f))) {
+        if (ImGui::Button("Stop Stream", ImVec2(120.0f, 26.0f))) {
             stream_stop_requested = true;
         }
     }
 
     ImGui::SameLine();
     bool vsync_val = vsync_enabled;
-    if (ImGui::Checkbox("啟用 VSync (垂直同步)", &vsync_val)) {
+    if (ImGui::Checkbox("Enable VSync", &vsync_val)) {
         vsync_enabled = vsync_val;
         glfwSwapInterval(vsync_enabled ? 1 : 0);
     }
@@ -342,7 +362,7 @@ void UIRenderer::renderConfigPanel(
 
     // Diagnostics Bar
     double render_fps = render_fps_tracker_.getFps();
-    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.6f, 1.0f), "即時監控數據:");
+    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.6f, 1.0f), "Real-Time Diagnostics:");
     ImGui::SameLine();
     ImGui::Text("Capture FPS: %.1f |", stats.capture_fps);
     ImGui::SameLine();

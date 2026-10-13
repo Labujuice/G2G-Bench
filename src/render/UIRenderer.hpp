@@ -9,6 +9,7 @@
 #include <memory>
 
 struct GLFWwindow;
+struct ImFont;
 
 namespace g2g {
 
@@ -64,6 +65,8 @@ private:
     std::string last_saved_path_;
 
     FpsTracker render_fps_tracker_;
+    ImFont* regular_font_{nullptr};
+    ImFont* large_font_{nullptr};
 };
 
 } // namespace g2g

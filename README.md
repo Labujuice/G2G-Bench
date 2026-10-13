@@ -119,24 +119,24 @@ make -j$(nproc)
 ./build/g2g_bench
 ```
 
-### UI 介面與控制說明
-1. **碼錶控制面板（左側）**：
-   * 點擊 **[啟動 (Start)]** 開始計時，**[暫停 (Pause)]** 暫停，**[歸零 (Reset)]** 重置。
-   * **快捷鍵**：
-     * `Space` (空白鍵)：切換啟動 / 暫停
-     * `R` 鍵：碼錶歸零
-     * `F` 鍵：切換凍結比對
-2. **視訊預覽面板（右側）**：
+### UI 介面與控制說明 (UI Controls)
+1. **Stopwatch Panel (左側基準碼錶)**：
+   * 點擊 **[Start]** 開始計時，**[Pause]** 暫停，**[Reset]** 重置。
+   * **快捷鍵 (Shortcuts)**：
+     * `Space` (空白鍵)：切換 Start / Pause
+     * `R` 鍵：碼錶 Reset
+     * `F` 鍵：切換 Freeze / Resume
+2. **Video Panel (右側視訊鏡像)**：
    * 顯示鏡頭反拍或圖傳回傳之畫面。
-   * 點擊 **[凍結比對 (Freeze)]**：左側基準碼錶與右側畫面同時瞬間定格，便於目視比對時間讀數。
-   * 點擊 **[單鍵快照存檔 (Dump PNG)]**：將定格畫面匯出至 `captures/` 目錄中。
-3. **參數配置與診斷面板（底部）**：
-   * **輸入源**：切換 `V4L2 / UVC 相機`、`UDP-RTP 串流`、`RTSP 串流`。
-   * **串流引擎**：
+   * 點擊 **[Freeze Compare]**：左側基準碼錶與右側畫面同時瞬間定格，便於目視比對時間讀數。
+   * 點擊 **[Save PNG Snapshot]**：將定格畫面匯出至 `captures/` 目錄中。
+3. **Configuration & Diagnostics Panel (底部配置面板)**：
+   * **Input Source**：切換 `V4L2 / UVC Camera`、`UDP-RTP Stream`、`RTSP Stream`。
+   * **Stream Engine**：
      * `(*) GStreamer Pipeline (Engine A)`
      * `( ) Pure C++ Native Direct IO (Engine B)`
      * 可隨時自由切換，系統將在 1 秒內無縫重建視訊管線。
-   * **垂直同步 (VSync)**：勾選可防畫面撕裂；取消勾選可解鎖渲染上限以測試極限更新率。
+   * **Enable VSync**：勾選可防畫面撕裂；取消勾選可解鎖渲染上限以測試極限更新率。
 
 ---
 
